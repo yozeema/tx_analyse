@@ -564,7 +564,7 @@
 
         const { xAxis, series } = buildSeries();
 
-        chart.setOption({
+        const option = {
           backgroundColor: "#fff",
           tooltip: {
             trigger: "axis",
@@ -619,7 +619,9 @@
             },
           ],
           series,
-        });
+        };
+
+        chart.setOption(option, { replaceMerge: ["series", "legend"] });
         scheduleAnnotationConnectorUpdate();
       }
 
