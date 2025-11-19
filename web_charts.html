@@ -304,15 +304,27 @@
         music: "音乐",
         memo: "备注",
       };
+      const ANNOTATION_ANCHOR_FIELD = "watchUcnt";
 
       let chart = echarts.init(document.getElementById("chart"));
       let tableData = [];
       let availableFields = [];
       let selectedSeries = new Set(DEFAULT_SERIES);
       let annotationPoints = [];
-      let annotationEntries = [];
+      let annotationAnchorField = null;
+      let connectorElements = [];
 
-      window.addEventListener("resize", () => chart.resize());
+      chart.on("finished", () => {
+        scheduleAnnotationConnectorUpdate();
+      });
+      chart.on("dataZoom", () => {
+        scheduleAnnotationConnectorUpdate();
+      });
+
+      window.addEventListener("resize", () => {
+        chart.resize();
+        scheduleAnnotationConnectorUpdate();
+      });
 
       function setStatus(message, type = "info") {
         STATUS.textContent = message;
@@ -324,7 +336,8 @@
         availableFields = [];
         selectedSeries = new Set(DEFAULT_SERIES);
         annotationPoints = [];
-        annotationEntries = [];
+        annotationAnchorField = null;
+        clearAnnotationConnectors();
         SERIES_CONTROLS.innerHTML = "";
         ANNOTATION_LIST.innerHTML = "";
         CONTROL_PANEL.classList.add("hidden");
@@ -340,9 +353,74 @@
         return Number.isFinite(parsed) ? parsed : null;
       }
 
-      function collectAnnotationData() {
+      function resolveAnnotationAnchorField() {
+        const hasAnchor = tableData.some((row) =>
+          Object.prototype.hasOwnProperty.call(row, ANNOTATION_ANCHOR_FIELD)
+        );
+        return hasAnchor ? ANNOTATION_ANCHOR_FIELD : null;
+      }
+
+      function scheduleAnnotationConnectorUpdate() {
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(updateAnnotationConnectors);
+        } else {
+          setTimeout(updateAnnotationConnectors, 0);
+        }
+      }
+
+      function clearAnnotationConnectors() {
+        if (!chart) return;
+        const zr = chart.getZr();
+        connectorElements.forEach((element) => zr.remove(element));
+        connectorElements = [];
+      }
+
+      function updateAnnotationConnectors() {
+        clearAnnotationConnectors();
+        if (!chart || !annotationPoints.length) return;
+        const zr = chart.getZr();
+        annotationPoints.forEach((point) => {
+          if (point.targetValue === null || point.targetValue === undefined) return;
+          const start = chart.convertToPixel(
+            { xAxisIndex: 0, yAxisIndex: 1 },
+            point.value
+          );
+          const end = chart.convertToPixel(
+            { xAxisIndex: 0, yAxisIndex: 0 },
+            [point.value[0], point.targetValue]
+          );
+          if (
+            !start ||
+            !end ||
+            !Number.isFinite(start[0]) ||
+            !Number.isFinite(start[1]) ||
+            !Number.isFinite(end[0]) ||
+            !Number.isFinite(end[1])
+          ) {
+            return;
+          }
+          const line = new echarts.graphic.Line({
+            shape: {
+              x1: start[0],
+              y1: start[1],
+              x2: end[0],
+              y2: end[1],
+            },
+            style: {
+              stroke: "rgba(71, 85, 105, 0.8)",
+              lineWidth: 1,
+              lineDash: [4, 4],
+            },
+            silent: true,
+            z: 10,
+          });
+          zr.add(line);
+          connectorElements.push(line);
+        });
+      }
+
+      function collectAnnotationData(anchorField) {
         annotationPoints = [];
-        annotationEntries = [];
         let drawTop = true;
         tableData.forEach((row) => {
           const tags = [];
@@ -361,21 +439,26 @@
             .filter((tag) => tag.type !== "memo")
             .map((tag) => tag.label)
             .join(" · ");
+          const targetValue =
+            anchorField && Object.prototype.hasOwnProperty.call(row, anchorField)
+              ? normalizeValue(row[anchorField])
+              : null;
           annotationPoints.push({
             value: [timeText, verticalMeta.valueY],
-            isTop,
-            connectorTarget: verticalMeta.connector,
             labelOffset: verticalMeta.offset,
             labelAlign: verticalMeta.align,
             shortLabel: shortLabel || "标注",
             fullText,
+            time: timeText,
+            tags,
+            targetValue,
           });
-          annotationEntries.push({ time: timeText, tags });
         });
+        annotationAnchorField = anchorField || null;
       }
 
       function renderAnnotationList() {
-        if (!annotationEntries.length) {
+        if (!annotationPoints.length) {
           ANNOTATION_PANEL.classList.add("hidden");
           ANNOTATION_LIST.innerHTML = "";
           return;
@@ -383,18 +466,18 @@
         ANNOTATION_PANEL.classList.remove("hidden");
         ANNOTATION_LIST.innerHTML = "";
         const fragment = document.createDocumentFragment();
-        annotationEntries.forEach((entry) => {
+        annotationPoints.forEach((point) => {
           const item = document.createElement("div");
           item.className = "annotation-item";
 
           const time = document.createElement("div");
           time.className = "annotation-time";
-          time.textContent = entry.time;
+          time.textContent = point.time;
           item.appendChild(time);
 
           const tagsWrapper = document.createElement("div");
           tagsWrapper.className = "annotation-tags";
-          entry.tags.forEach((tag) => {
+          point.tags.forEach((tag) => {
             const tagEl = document.createElement("span");
             tagEl.className = "annotation-tag";
             if (tag.type) {
@@ -449,13 +532,6 @@
                     offset: [0, point.labelOffset],
                   },
                 }));
-                const annotationLines = annotationPoints.map((point) => [
-                  { coord: point.value, symbol: "none" },
-                  {
-                    coord: [point.value[0], point.connectorTarget],
-                    symbol: "none",
-                  },
-                ]);
                 return {
                   name: "主C/音乐标记",
                   type: "scatter",
@@ -465,16 +541,6 @@
                   labelLayout: { moveOverlap: "shiftY" },
                   itemStyle: { color: "#3182ce" },
                   tooltip: { show: false },
-                  markLine: {
-                    silent: true,
-                    symbol: ["none", "none"],
-                    lineStyle: {
-                      color: "rgba(71, 85, 105, 0.8)",
-                      type: "dashed",
-                      width: 1,
-                    },
-                    data: annotationLines,
-                  },
                 };
               })()
             : null;
@@ -485,6 +551,7 @@
       function renderChart() {
         if (!tableData.length) {
           chart.clear();
+          clearAnnotationConnectors();
           return;
         }
 
@@ -546,6 +613,7 @@
           ],
           series,
         });
+        scheduleAnnotationConnectorUpdate();
       }
 
       function buildControls() {
@@ -571,6 +639,9 @@
               selectedSeries.delete(fieldName);
               label.classList.remove("active");
             }
+            const nextAnchor = resolveAnnotationAnchorField();
+            collectAnnotationData(nextAnchor);
+            renderAnnotationList();
             renderChart();
           });
 
@@ -609,7 +680,8 @@
           selectedSeries.add(availableFields[0]);
         }
 
-        collectAnnotationData();
+        const anchorField = resolveAnnotationAnchorField();
+        collectAnnotationData(anchorField);
         renderAnnotationList();
         buildControls();
         renderChart();
