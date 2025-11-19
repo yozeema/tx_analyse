@@ -342,6 +342,7 @@
       function collectAnnotationData() {
         annotationPoints = [];
         annotationEntries = [];
+        let drawTop = true;
         tableData.forEach((row) => {
           const tags = [];
           if (row.c) tags.push({ label: "主C", value: row.c, type: "c" });
@@ -349,14 +350,24 @@
           if (row.memo) tags.push({ label: "备注", value: row.memo, type: "memo" });
           if (!tags.length) return;
           const timeText = row.timeMinute ?? "--";
+          const isTop = drawTop;
+          drawTop = !drawTop;
+          const verticalMeta = isTop
+            ? { valueY: 1.05, connector: 0.8, offset: -12, align: "bottom" }
+            : { valueY: -0.05, connector: 0.2, offset: 12, align: "top" };
+          const fullText = tags.map((tag) => `${tag.label}：${tag.value}`).join("\n");
           const shortLabel = tags
             .filter((tag) => tag.type !== "memo")
             .map((tag) => tag.label)
             .join(" · ");
           annotationPoints.push({
-            value: [timeText, 1],
+            value: [timeText, verticalMeta.valueY],
+            isTop,
+            connectorTarget: verticalMeta.connector,
+            labelOffset: verticalMeta.offset,
+            labelAlign: verticalMeta.align,
             shortLabel: shortLabel || "标注",
-            fullText: tags.map((tag) => `${tag.label}：${tag.value}`).join("\n"),
+            fullText,
           });
           annotationEntries.push({ time: timeText, tags });
         });
@@ -413,41 +424,58 @@
 
         const annotationSeries =
           annotationPoints.length > 0
-            ? {
-                name: "主C/音乐标记",
-                type: "scatter",
-                yAxisIndex: 1,
-                symbolSize: 8,
-                data: annotationPoints,
-                label: {
-                  show: true,
-                  formatter: (params) => params.data.shortLabel,
-                  color: "#1a202c",
-                  fontSize: 11,
-                  fontWeight: 500,
-                  backgroundColor: "rgba(255, 255, 255, 0.95)",
-                  borderColor: "#cbd5f5",
-                  borderWidth: 1,
-                  borderRadius: 999,
-                  padding: [2, 10],
-                },
-                labelLayout: { moveOverlap: "shiftY" },
-                itemStyle: { color: "#3182ce" },
-                emphasis: {
-                  scale: false,
+            ? (() => {
+                const annotationData = annotationPoints.map((point) => ({
+                  value: point.value,
+                  shortLabel: point.shortLabel,
+                  fullText: point.fullText,
                   label: {
-                    formatter: (params) => params.data.fullText,
-                    backgroundColor: "#fff",
-                    borderColor: "#63b3ed",
-                    borderWidth: 1,
-                    borderRadius: 8,
-                    padding: [6, 8],
-                    lineHeight: 18,
+                    show: true,
+                    formatter: point.fullText,
                     color: "#1a202c",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    backgroundColor: "rgba(255, 255, 255, 0.95)",
+                    borderColor: "#cbd5f5",
+                    borderWidth: 1,
+                    borderRadius: 10,
+                    padding: [6, 10],
+                    lineHeight: 18,
+                    shadowColor: "rgba(15, 23, 42, 0.12)",
+                    shadowBlur: 6,
+                    align: "center",
+                    verticalAlign: point.labelAlign,
+                    offset: [0, point.labelOffset],
                   },
-                },
-                tooltip: { show: false },
-              }
+                }));
+                const annotationLines = annotationPoints.map((point) => [
+                  { coord: point.value, symbol: "none" },
+                  {
+                    coord: [point.value[0], point.connectorTarget],
+                    symbol: "none",
+                  },
+                ]);
+                return {
+                  name: "主C/音乐标记",
+                  type: "scatter",
+                  yAxisIndex: 1,
+                  symbolSize: 8,
+                  data: annotationData,
+                  labelLayout: { moveOverlap: "shiftY" },
+                  itemStyle: { color: "#3182ce" },
+                  tooltip: { show: false },
+                  markLine: {
+                    silent: true,
+                    symbol: ["none", "none"],
+                    lineStyle: {
+                      color: "rgba(71, 85, 105, 0.8)",
+                      type: "dashed",
+                      width: 1,
+                    },
+                    data: annotationLines,
+                  },
+                };
+              })()
             : null;
 
         return { xAxis, series: annotationSeries ? [...lineSeries, annotationSeries] : lineSeries };
@@ -511,8 +539,8 @@
             {
               type: "value",
               show: false,
-              min: 0,
-              max: 1,
+              min: -0.2,
+              max: 1.2,
             },
           ],
           series,
