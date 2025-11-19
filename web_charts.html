@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>直播趋势图生成器</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        background: #f5f6fa;
+        color: #1e1f25;
+      }
+
+      main {
+        max-width: 1200px;
+        margin: 32px auto;
+        padding: 0 24px 48px;
+      }
+
+      h1 {
+        font-size: 24px;
+        margin-bottom: 8px;
+      }
+
+      p {
+        margin: 0 0 8px;
+        color: #4a4f62;
+      }
+
+      .panel {
+        background: #fff;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+        margin-bottom: 24px;
+      }
+
+      #drop-zone {
+        border: 2px dashed #a0aec0;
+        border-radius: 12px;
+        padding: 32px;
+        text-align: center;
+        transition: all 0.2s ease;
+        background: #fdfefe;
+        cursor: pointer;
+      }
+
+      #drop-zone.active {
+        border-color: #3182ce;
+        background: #edf5ff;
+      }
+
+      #drop-zone span {
+        display: block;
+        font-size: 16px;
+        color: #2a4365;
+      }
+
+      #drop-zone small {
+        display: block;
+        margin-top: 6px;
+        color: #718096;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      #series-controls {
+        display: grid;
+        gap: 4px 16px;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        margin-top: 12px;
+      }
+
+      label.checkbox {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: #f6f8fb;
+        border: 1px solid transparent;
+        transition: border-color 0.2s ease;
+      }
+
+      label.checkbox input {
+        cursor: pointer;
+      }
+
+      label.checkbox span {
+        cursor: pointer;
+      }
+
+      label.checkbox.active {
+        border-color: #3182ce;
+        background: #edf5ff;
+      }
+
+      #chart {
+        width: 100%;
+        height: 540px;
+      }
+
+      #status {
+        margin-top: 8px;
+        font-size: 14px;
+        min-height: 20px;
+      }
+
+      #status.error {
+        color: #c53030;
+      }
+
+      #status.success {
+        color: #2f855a;
+      }
+
+      #status.info {
+        color: #2b6cb0;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      button,
+      .ghost-btn {
+        border: none;
+        border-radius: 8px;
+        height: 40px;
+        padding: 0 16px;
+        cursor: pointer;
+        font-size: 15px;
+        transition: background 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+      }
+
+      button.primary {
+        background: #3182ce;
+        color: #fff;
+      }
+
+      button.primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .ghost-btn {
+        background: transparent;
+        border: 1px solid #cbd5f5;
+        color: #2a4365;
+      }
+
+      .legend-note {
+        font-size: 13px;
+        color: #556079;
+        margin-top: 6px;
+      }
+
+      .annotation-panel h2 {
+        margin: 0 0 4px;
+        font-size: 18px;
+      }
+
+      .annotation-panel .legend-note {
+        margin-top: 0;
+      }
+
+      .annotation-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 16px;
+        max-height: 220px;
+        overflow-y: auto;
+        padding-right: 6px;
+      }
+
+      .annotation-item {
+        flex: 1 1 220px;
+        min-width: 200px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 12px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      }
+
+      .annotation-time {
+        font-size: 13px;
+        color: #6b7280;
+      }
+
+      .annotation-tags {
+        margin-top: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .annotation-tag {
+        font-size: 13px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(49, 130, 206, 0.3);
+        background: rgba(49, 130, 206, 0.08);
+        color: #1a365d;
+      }
+
+      .annotation-tag-c {
+        border-color: rgba(49, 130, 206, 0.3);
+      }
+
+      .annotation-tag-music {
+        background: rgba(56, 161, 105, 0.12);
+        color: #1c4532;
+        border-color: rgba(56, 161, 105, 0.2);
+      }
+
+      .annotation-tag-memo {
+        background: rgba(113, 128, 150, 0.12);
+        color: #2d3748;
+        border-color: rgba(113, 128, 150, 0.2);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="panel">
+        <h1>直播间数据趋势图</h1>
+        <p>上传 xlsx 文件后自动生成 ECharts 折线图。</p>
+        <div id="drop-zone">
+          <span>点击或拖拽 XLSX 文件到此区域</span>
+          <small>仅处理单工作表；重复上传会覆盖当前图表</small>
+        </div>
+        <input class="hidden" type="file" id="file-input" accept=".xlsx" />
+        <div class="actions">
+          <button id="upload-btn" class="primary">选择文件</button>
+          <button id="clear-btn" class="ghost-btn" disabled>清空数据</button>
+        </div>
+        <p id="status" class="info">尚未上传数据</p>
+      </section>
+
+      <section id="control-panel" class="panel hidden">
+        <h2>指标切换</h2>
+        <p class="legend-note">
+          默认展示进入直播间人数（watchUcnt）与在线观众高峰（watchUcntRank），可按需勾选其他指标。
+        </p>
+        <div id="series-controls"></div>
+      </section>
+
+      <section class="panel">
+        <div id="chart"></div>
+      </section>
+
+      <section id="annotation-panel" class="panel annotation-panel hidden">
+        <h2>主C / 音乐标注时间轴</h2>
+        <p class="legend-note">通过卡片形式查看所有主C、音乐或备注信息。</p>
+        <div id="annotation-list" class="annotation-list"></div>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script>
+      const FILE_INPUT = document.getElementById("file-input");
+      const DROP_ZONE = document.getElementById("drop-zone");
+      const STATUS = document.getElementById("status");
+      const UPLOAD_BTN = document.getElementById("upload-btn");
+      const CLEAR_BTN = document.getElementById("clear-btn");
+      const CONTROL_PANEL = document.getElementById("control-panel");
+      const SERIES_CONTROLS = document.getElementById("series-controls");
+      const ANNOTATION_PANEL = document.getElementById("annotation-panel");
+      const ANNOTATION_LIST = document.getElementById("annotation-list");
+
+      const DEFAULT_SERIES = ["pcuTotal", "watchUcnt"];
+      const SPECIAL_FIELDS = ["c", "music"];
+      const SKIPPED_FIELDS = ["timeMinute", "memo", ...SPECIAL_FIELDS];
+
+      const FIELD_LABELS = {
+        timeMinute: "时刻",
+        commentCnt: "评论数",
+        commentCntRank: "互动高峰",
+        commentUcnt: "评论人数",
+        consumeUcnt: "送礼人数",
+        earnScore: "音浪",
+        earnScoreRank: "送礼高峰",
+        followUcnt: "关注人数",
+        likeCnt: "点赞数",
+        likeUcnt: "点赞人数",
+        pcuTotal: "在线人数",
+        watchUcnt: "进入直播间人数",
+        watchUcntRank: "在线观众高峰",
+        c: "主C",
+        music: "音乐",
+        memo: "备注",
+      };
+
+      let chart = echarts.init(document.getElementById("chart"));
+      let tableData = [];
+      let availableFields = [];
+      let selectedSeries = new Set(DEFAULT_SERIES);
+      let annotationPoints = [];
+      let annotationEntries = [];
+
+      window.addEventListener("resize", () => chart.resize());
+
+      function setStatus(message, type = "info") {
+        STATUS.textContent = message;
+        STATUS.className = type;
+      }
+
+      function resetState() {
+        tableData = [];
+        availableFields = [];
+        selectedSeries = new Set(DEFAULT_SERIES);
+        annotationPoints = [];
+        annotationEntries = [];
+        SERIES_CONTROLS.innerHTML = "";
+        ANNOTATION_LIST.innerHTML = "";
+        CONTROL_PANEL.classList.add("hidden");
+        ANNOTATION_PANEL.classList.add("hidden");
+        chart.clear();
+        setStatus("尚未上传数据", "info");
+        CLEAR_BTN.disabled = true;
+      }
+
+      function normalizeValue(value) {
+        if (value === null || value === undefined || value === "") return null;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+
+      function collectAnnotationData() {
+        annotationPoints = [];
+        annotationEntries = [];
+        tableData.forEach((row) => {
+          const tags = [];
+          if (row.c) tags.push({ label: "主C", value: row.c, type: "c" });
+          if (row.music) tags.push({ label: "音乐", value: row.music, type: "music" });
+          if (row.memo) tags.push({ label: "备注", value: row.memo, type: "memo" });
+          if (!tags.length) return;
+          const timeText = row.timeMinute ?? "--";
+          const shortLabel = tags
+            .filter((tag) => tag.type !== "memo")
+            .map((tag) => tag.label)
+            .join(" · ");
+          annotationPoints.push({
+            value: [timeText, 1],
+            shortLabel: shortLabel || "标注",
+            fullText: tags.map((tag) => `${tag.label}：${tag.value}`).join("\n"),
+          });
+          annotationEntries.push({ time: timeText, tags });
+        });
+      }
+
+      function renderAnnotationList() {
+        if (!annotationEntries.length) {
+          ANNOTATION_PANEL.classList.add("hidden");
+          ANNOTATION_LIST.innerHTML = "";
+          return;
+        }
+        ANNOTATION_PANEL.classList.remove("hidden");
+        ANNOTATION_LIST.innerHTML = "";
+        const fragment = document.createDocumentFragment();
+        annotationEntries.forEach((entry) => {
+          const item = document.createElement("div");
+          item.className = "annotation-item";
+
+          const time = document.createElement("div");
+          time.className = "annotation-time";
+          time.textContent = entry.time;
+          item.appendChild(time);
+
+          const tagsWrapper = document.createElement("div");
+          tagsWrapper.className = "annotation-tags";
+          entry.tags.forEach((tag) => {
+            const tagEl = document.createElement("span");
+            tagEl.className = "annotation-tag";
+            if (tag.type) {
+              tagEl.classList.add(`annotation-tag-${tag.type}`);
+            }
+            tagEl.textContent = `${tag.label}：${tag.value}`;
+            tagsWrapper.appendChild(tagEl);
+          });
+          item.appendChild(tagsWrapper);
+          fragment.appendChild(item);
+        });
+        ANNOTATION_LIST.appendChild(fragment);
+      }
+
+      function buildSeries() {
+        const xAxis = tableData.map((row) => row.timeMinute ?? "");
+        const lineSeries = [...selectedSeries].map((field) => {
+          const label = FIELD_LABELS[field] || field;
+          return {
+            name: label,
+            type: "line",
+            showSymbol: false,
+            connectNulls: true,
+            emphasis: { focus: "series" },
+            data: tableData.map((row) => normalizeValue(row[field])),
+          };
+        });
+
+        const annotationSeries =
+          annotationPoints.length > 0
+            ? {
+                name: "主C/音乐标记",
+                type: "scatter",
+                yAxisIndex: 1,
+                symbolSize: 8,
+                data: annotationPoints,
+                label: {
+                  show: true,
+                  formatter: (params) => params.data.shortLabel,
+                  color: "#1a202c",
+                  fontSize: 11,
+                  fontWeight: 500,
+                  backgroundColor: "rgba(255, 255, 255, 0.95)",
+                  borderColor: "#cbd5f5",
+                  borderWidth: 1,
+                  borderRadius: 999,
+                  padding: [2, 10],
+                },
+                labelLayout: { moveOverlap: "shiftY" },
+                itemStyle: { color: "#3182ce" },
+                emphasis: {
+                  scale: false,
+                  label: {
+                    formatter: (params) => params.data.fullText,
+                    backgroundColor: "#fff",
+                    borderColor: "#63b3ed",
+                    borderWidth: 1,
+                    borderRadius: 8,
+                    padding: [6, 8],
+                    lineHeight: 18,
+                    color: "#1a202c",
+                  },
+                },
+                tooltip: { show: false },
+              }
+            : null;
+
+        return { xAxis, series: annotationSeries ? [...lineSeries, annotationSeries] : lineSeries };
+      }
+
+      function renderChart() {
+        if (!tableData.length) {
+          chart.clear();
+          return;
+        }
+
+        const { xAxis, series } = buildSeries();
+
+        chart.setOption({
+          backgroundColor: "#fff",
+          tooltip: {
+            trigger: "axis",
+            axisPointer: { type: "line" },
+            formatter(params) {
+              if (!params.length) return "";
+              const index = params[0].dataIndex;
+              const baseRow = tableData[index] || {};
+              const header = `<strong>${baseRow.timeMinute ?? "--"}</strong>`;
+              const lines = params
+                .filter((item) => item.seriesType !== "scatter")
+                .map((item) => {
+                  const val =
+                    item.value === null || item.value === undefined ? "--" : item.value;
+                  return `${item.marker}${item.seriesName}：${val}`;
+                });
+              const extras = [];
+              if (baseRow.c) extras.push(`主C：${baseRow.c}`);
+              if (baseRow.music) extras.push(`音乐：${baseRow.music}`);
+              if (baseRow.memo) extras.push(`备注：${baseRow.memo}`);
+              if (extras.length) {
+                lines.push(extras.join("<br/>"));
+              }
+              return [header, ...lines].join("<br/>");
+            },
+          },
+          legend: {
+            type: "scroll",
+            top: 8,
+          },
+          grid: { top: 60, left: 60, right: 30, bottom: 80 },
+          dataZoom: [
+            { type: "inside", xAxisIndex: 0 },
+            { type: "slider", xAxisIndex: 0, height: 24, bottom: 20 },
+          ],
+          xAxis: {
+            type: "category",
+            boundaryGap: false,
+            data: xAxis,
+            axisLabel: { rotate: 45 },
+          },
+          yAxis: [
+            {
+              type: "value",
+              name: "指标值",
+            },
+            {
+              type: "value",
+              show: false,
+              min: 0,
+              max: 1,
+            },
+          ],
+          series,
+        });
+      }
+
+      function buildControls() {
+        SERIES_CONTROLS.innerHTML = "";
+        availableFields.forEach((field) => {
+          const label = document.createElement("label");
+          label.className = "checkbox" + (selectedSeries.has(field) ? " active" : "");
+
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = selectedSeries.has(field);
+          checkbox.dataset.field = field;
+
+          const text = document.createElement("span");
+          text.textContent = FIELD_LABELS[field] || field;
+
+          checkbox.addEventListener("change", (event) => {
+            const fieldName = event.target.dataset.field;
+            if (event.target.checked) {
+              selectedSeries.add(fieldName);
+              label.classList.add("active");
+            } else {
+              selectedSeries.delete(fieldName);
+              label.classList.remove("active");
+            }
+            renderChart();
+          });
+
+          label.appendChild(checkbox);
+          label.appendChild(text);
+          SERIES_CONTROLS.appendChild(label);
+        });
+
+        CONTROL_PANEL.classList.toggle("hidden", availableFields.length === 0);
+      }
+
+      function handleWorkbookRows(rows) {
+        if (!rows.length) {
+          setStatus("数据为空，请检查 xlsx 内容。", "error");
+          return;
+        }
+        if (!Object.prototype.hasOwnProperty.call(rows[0], "timeMinute")) {
+          setStatus("缺少 timeMinute 列，无法生成趋势图。", "error");
+          return;
+        }
+        tableData = rows;
+        const fieldSet = new Set();
+        rows.forEach((row) => {
+          Object.keys(row).forEach((key) => {
+            if (!SKIPPED_FIELDS.includes(key)) {
+              fieldSet.add(key);
+            }
+          });
+        });
+        availableFields = Array.from(fieldSet);
+        selectedSeries = new Set(
+          DEFAULT_SERIES.filter((field) => availableFields.includes(field))
+        );
+
+        if (!selectedSeries.size && availableFields.length) {
+          selectedSeries.add(availableFields[0]);
+        }
+
+        collectAnnotationData();
+        renderAnnotationList();
+        buildControls();
+        renderChart();
+        setStatus("数据加载完成，可继续拖动或点击切换指标。", "success");
+        CLEAR_BTN.disabled = false;
+      }
+
+      function parseFile(file) {
+        setStatus("正在读取并解析文件...", "info");
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const data = new Uint8Array(event.target.result);
+            const workbook = XLSX.read(data, { type: "array" });
+            if (!workbook.SheetNames.length) {
+              setStatus("未检测到工作表。", "error");
+              return;
+            }
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+            handleWorkbookRows(rows);
+          } catch (err) {
+            console.error(err);
+            setStatus("解析失败，请确认文件格式正确。", "error");
+          }
+        };
+        reader.onerror = () => {
+          setStatus("文件读取失败，请重试。", "error");
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
+      function handleFiles(fileList) {
+        const file = fileList?.[0];
+        if (!file) return;
+        if (!/\.xlsx$/i.test(file.name)) {
+          setStatus("仅支持 .xlsx 文件。", "error");
+          return;
+        }
+        parseFile(file);
+      }
+
+      DROP_ZONE.addEventListener("click", () => FILE_INPUT.click());
+
+      ["dragenter", "dragover"].forEach((eventName) =>
+        DROP_ZONE.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          DROP_ZONE.classList.add("active");
+        })
+      );
+
+      ["dragleave", "drop"].forEach((eventName) =>
+        DROP_ZONE.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          DROP_ZONE.classList.remove("active");
+        })
+      );
+
+      DROP_ZONE.addEventListener("drop", (event) => {
+        handleFiles(event.dataTransfer.files);
+      });
+
+      FILE_INPUT.addEventListener("change", (event) => {
+        handleFiles(event.target.files);
+        FILE_INPUT.value = "";
+      });
+
+      UPLOAD_BTN.addEventListener("click", () => FILE_INPUT.click());
+
+      CLEAR_BTN.addEventListener("click", () => resetState());
+    </script>
+  </body>
+</html>
