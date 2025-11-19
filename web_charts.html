@@ -353,6 +353,13 @@
         return Number.isFinite(parsed) ? parsed : null;
       }
 
+      function formatAnnotationTag(tag) {
+        if (tag.type === "c" || tag.type === "music") {
+          return tag.value;
+        }
+        return `${tag.label}：${tag.value}`;
+      }
+
       function resolveAnnotationAnchorField() {
         const hasAnchor = tableData.some((row) =>
           Object.prototype.hasOwnProperty.call(row, ANNOTATION_ANCHOR_FIELD)
@@ -434,7 +441,7 @@
           const verticalMeta = isTop
             ? { valueY: 1.05, connector: 0.8, offset: -12, align: "bottom" }
             : { valueY: -0.05, connector: 0.2, offset: 12, align: "top" };
-          const fullText = tags.map((tag) => `${tag.label}：${tag.value}`).join("\n");
+          const fullText = tags.map(formatAnnotationTag).join("\n");
           const shortLabel = tags
             .filter((tag) => tag.type !== "memo")
             .map((tag) => tag.label)
@@ -483,7 +490,7 @@
             if (tag.type) {
               tagEl.classList.add(`annotation-tag-${tag.type}`);
             }
-            tagEl.textContent = `${tag.label}：${tag.value}`;
+            tagEl.textContent = formatAnnotationTag(tag);
             tagsWrapper.appendChild(tagEl);
           });
           item.appendChild(tagsWrapper);
@@ -575,8 +582,8 @@
                   return `${item.marker}${item.seriesName}：${val}`;
                 });
               const extras = [];
-              if (baseRow.c) extras.push(`主C：${baseRow.c}`);
-              if (baseRow.music) extras.push(`音乐：${baseRow.music}`);
+              const performerLine = [baseRow.c, baseRow.music].filter(Boolean).join(" ");
+              if (performerLine) extras.push(performerLine);
               if (baseRow.memo) extras.push(`备注：${baseRow.memo}`);
               if (extras.length) {
                 lines.push(extras.join("<br/>"));
