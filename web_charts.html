@@ -297,6 +297,7 @@
       let selectedSeries = new Set(DEFAULT_SERIES);
       let annotationPoints = [];
       let connectorElements = [];
+      let showKeyEvents = true;
 
       chart.on("finished", () => {
         scheduleAnnotationConnectorUpdate();
@@ -315,11 +316,17 @@
         STATUS.className = type;
       }
 
+      function isZeroMoment(value) {
+        if (value === null || value === undefined) return false;
+        return String(value).trim() === "0";
+      }
+
       function resetState() {
         tableData = [];
         availableFields = [];
         selectedSeries = new Set(DEFAULT_SERIES);
         annotationPoints = [];
+        showKeyEvents = true;
         clearAnnotationConnectors();
         SERIES_CONTROLS.innerHTML = "";
         ANNOTATION_LIST.innerHTML = "";
@@ -404,10 +411,12 @@
 
       function collectAnnotationData() {
         annotationPoints = [];
+        if (!showKeyEvents) return;
         let drawTop = true;
         tableData.forEach((row) => {
           const tags = [];
-          if (row.keyEvent) tags.push({ label: "关键事件", value: row.keyEvent, type: "keyEvent" });
+          if (row.keyEvent && !isZeroMoment(row.timeMinute))
+            tags.push({ label: "关键事件", value: row.keyEvent, type: "keyEvent" });
           if (!tags.length) return;
           const timeText = row.timeMinute ?? "--";
           const isTop = drawTop;
@@ -510,7 +519,7 @@
                   },
                 }));
                 return {
-                  name: "关键事件标记",
+                  name: "关键事件",
                   type: "scatter",
                   yAxisIndex: 1,
                   symbolSize: 8,
@@ -552,7 +561,8 @@
                   return `${item.marker}${item.seriesName}：${val}`;
                 });
               const extras = [];
-              if (baseRow.keyEvent) extras.push(`关键事件：${baseRow.keyEvent}`);
+              if (baseRow.keyEvent && !isZeroMoment(baseRow.timeMinute))
+                extras.push(`关键事件：${baseRow.keyEvent}`);
               if (extras.length) {
                 lines.push(extras.join("<br/>"));
               }
@@ -626,7 +636,25 @@
           SERIES_CONTROLS.appendChild(label);
         });
 
-        CONTROL_PANEL.classList.toggle("hidden", availableFields.length === 0);
+        const keyEventLabel = document.createElement("label");
+        keyEventLabel.className = "checkbox" + (showKeyEvents ? " active" : "");
+        const keyEventCheckbox = document.createElement("input");
+        keyEventCheckbox.type = "checkbox";
+        keyEventCheckbox.checked = showKeyEvents;
+        keyEventCheckbox.addEventListener("change", (event) => {
+          showKeyEvents = event.target.checked;
+          keyEventLabel.classList.toggle("active", showKeyEvents);
+          collectAnnotationData();
+          renderAnnotationList();
+          renderChart();
+        });
+        const keyEventText = document.createElement("span");
+        keyEventText.textContent = FIELD_LABELS.keyEvent;
+        keyEventLabel.appendChild(keyEventCheckbox);
+        keyEventLabel.appendChild(keyEventText);
+        SERIES_CONTROLS.appendChild(keyEventLabel);
+
+        CONTROL_PANEL.classList.toggle("hidden", !tableData.length);
       }
 
       function handleWorkbookRows(rows) {
@@ -639,6 +667,7 @@
           return;
         }
         tableData = rows;
+        showKeyEvents = true;
         const fieldSet = new Set();
         rows.forEach((row) => {
           Object.keys(row).forEach((key) => {
