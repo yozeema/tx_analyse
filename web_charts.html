@@ -769,7 +769,10 @@
         if (!fileName) return;
         setStatus(`正在加载 ${fileName}...`, "info");
         try {
-          const response = await fetch(`live_data/${encodeURIComponent(fileName)}`);
+          const response = await fetch(
+            `live_data/${encodeURIComponent(fileName)}`,
+            { cache: "no-store" }
+          );
           if (!response.ok) {
             throw new Error(`请求失败：${response.status}`);
           }
