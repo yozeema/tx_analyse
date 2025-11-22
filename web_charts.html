@@ -657,7 +657,7 @@
         CONTROL_PANEL.classList.toggle("hidden", !tableData.length);
       }
 
-      function handleWorkbookRows(rows) {
+      function handleWorkbookRows(rows, sourceLabel) {
         if (!rows.length) {
           setStatus("数据为空，请检查 xlsx 内容。", "error");
           return;
@@ -689,29 +689,34 @@
         renderAnnotationList();
         buildControls();
         renderChart();
-        setStatus("数据加载完成，可继续拖动或点击切换指标。", "success");
+        const label = sourceLabel ? `：${sourceLabel}` : "";
+        setStatus(`数据加载完成${label}，可继续拖动或点击切换指标。`, "success");
         CLEAR_BTN.disabled = false;
+      }
+
+      function parseArrayBuffer(arrayBuffer, sourceLabel) {
+        try {
+          const data = new Uint8Array(arrayBuffer);
+          const workbook = XLSX.read(data, { type: "array" });
+          if (!workbook.SheetNames.length) {
+            setStatus("未检测到工作表。", "error");
+            return;
+          }
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+          handleWorkbookRows(rows, sourceLabel);
+        } catch (err) {
+          console.error(err);
+          setStatus("解析失败，请确认文件格式正确。", "error");
+        }
       }
 
       function parseFile(file) {
         setStatus("正在读取并解析文件...", "info");
         const reader = new FileReader();
         reader.onload = (event) => {
-          try {
-            const data = new Uint8Array(event.target.result);
-            const workbook = XLSX.read(data, { type: "array" });
-            if (!workbook.SheetNames.length) {
-              setStatus("未检测到工作表。", "error");
-              return;
-            }
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-            handleWorkbookRows(rows);
-          } catch (err) {
-            console.error(err);
-            setStatus("解析失败，请确认文件格式正确。", "error");
-          }
+          parseArrayBuffer(event.target.result, file.name);
         };
         reader.onerror = () => {
           setStatus("文件读取失败，请重试。", "error");
@@ -757,6 +762,26 @@
       UPLOAD_BTN.addEventListener("click", () => FILE_INPUT.click());
 
       CLEAR_BTN.addEventListener("click", () => resetState());
+
+      async function loadFileFromQuery() {
+        const params = new URLSearchParams(window.location.search);
+        const fileName = params.get("file");
+        if (!fileName) return;
+        setStatus(`正在加载 ${fileName}...`, "info");
+        try {
+          const response = await fetch(`live_data/${encodeURIComponent(fileName)}`);
+          if (!response.ok) {
+            throw new Error(`请求失败：${response.status}`);
+          }
+          const buffer = await response.arrayBuffer();
+          parseArrayBuffer(buffer, fileName);
+        } catch (err) {
+          console.error(err);
+          setStatus("从 live_data 读取文件失败，请检查文件是否存在。", "error");
+        }
+      }
+
+      loadFileFromQuery();
     </script>
   </body>
 </html>

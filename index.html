@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>直播场次列表</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        background: #f5f6fa;
+        color: #1e1f25;
+      }
+
+      main {
+        max-width: 960px;
+        margin: 32px auto;
+        padding: 0 24px 40px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 26px;
+      }
+
+      p.subtitle {
+        margin: 0 0 16px;
+        color: #4a4f62;
+      }
+
+      .panel {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+        padding: 20px;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      select,
+      button {
+        height: 36px;
+        border-radius: 8px;
+        border: 1px solid #cbd5f5;
+        background: #f9fbff;
+        padding: 0 12px;
+        font-size: 14px;
+        color: #1a365d;
+      }
+
+      button {
+        cursor: pointer;
+        background: #3182ce;
+        color: #fff;
+        border: none;
+        transition: opacity 0.2s ease;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      ul.session-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      .session-item + .session-item {
+        border-top: 1px solid #e2e8f0;
+      }
+
+      .session-item a {
+        display: block;
+        padding: 14px 16px;
+        text-decoration: none;
+        color: inherit;
+        background: #fff;
+        transition: background 0.15s ease;
+      }
+
+      .session-item a:hover {
+        background: #f0f7ff;
+      }
+
+      .session-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        font-size: 15px;
+      }
+
+      .session-name {
+        font-weight: 600;
+      }
+
+      .session-link {
+        font-size: 13px;
+        color: #2b6cb0;
+      }
+
+      .pagination {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 16px;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+      }
+
+      .status {
+        margin: 8px 0 12px;
+        color: #4a4f62;
+        min-height: 20px;
+        font-size: 14px;
+      }
+
+      .status.error {
+        color: #c53030;
+      }
+
+      .status.success {
+        color: #2f855a;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>直播场次列表</h1>
+      <p class="subtitle">来自 live_data 目录的 xlsx 文件，点击进入详情趋势图。</p>
+
+      <section class="panel">
+        <div class="toolbar">
+          <label>
+            每页显示
+            <select id="page-size">
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+            </select>
+            条
+          </label>
+          <button id="refresh-btn">刷新列表</button>
+        </div>
+
+        <div id="status" class="status">加载中...</div>
+        <ul id="session-list" class="session-list"></ul>
+
+        <div class="pagination">
+          <button id="prev-btn">上一页</button>
+          <span id="page-info"></span>
+          <button id="next-btn">下一页</button>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const pageSizeSelect = document.getElementById("page-size");
+      const refreshBtn = document.getElementById("refresh-btn");
+      const statusEl = document.getElementById("status");
+      const listEl = document.getElementById("session-list");
+      const prevBtn = document.getElementById("prev-btn");
+      const nextBtn = document.getElementById("next-btn");
+      const pageInfo = document.getElementById("page-info");
+
+      let files = [];
+      let currentPage = 1;
+      let pageSize = Number(pageSizeSelect.value);
+
+      function setStatus(text, type = "") {
+        statusEl.textContent = text;
+        statusEl.className = `status${type ? " " + type : ""}`;
+      }
+
+      function renderList() {
+        listEl.innerHTML = "";
+        if (!files.length) {
+          setStatus("暂无数据，请确认 live_data 目录下存在 .xlsx 文件。", "error");
+          pageInfo.textContent = "";
+          prevBtn.disabled = true;
+          nextBtn.disabled = true;
+          return;
+        }
+
+        const totalPages = Math.max(1, Math.ceil(files.length / pageSize));
+        currentPage = Math.min(currentPage, totalPages);
+        const start = (currentPage - 1) * pageSize;
+        const end = start + pageSize;
+        const pageItems = files.slice(start, end);
+
+        pageItems.forEach((fileName) => {
+          const li = document.createElement("li");
+          li.className = "session-item";
+          const link = document.createElement("a");
+          link.href = `web_charts.html?file=${encodeURIComponent(fileName)}`;
+          link.title = "查看趋势图";
+
+          const meta = document.createElement("div");
+          meta.className = "session-meta";
+
+          const name = document.createElement("span");
+          name.className = "session-name";
+          name.textContent = fileName;
+
+          const jump = document.createElement("span");
+          jump.className = "session-link";
+          jump.textContent = "查看";
+
+          meta.appendChild(name);
+          meta.appendChild(jump);
+          link.appendChild(meta);
+          li.appendChild(link);
+          listEl.appendChild(li);
+        });
+
+        pageInfo.textContent = `第 ${currentPage} / ${totalPages} 页（共 ${files.length} 场）`;
+        prevBtn.disabled = currentPage === 1;
+        nextBtn.disabled = currentPage === totalPages;
+        setStatus("列表已加载。", "success");
+      }
+
+      async function loadFiles() {
+        setStatus("加载中...");
+        listEl.innerHTML = "";
+        try {
+          const res = await fetch("live_data/index.json", { cache: "no-cache" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          const rawFiles = Array.isArray(data.files) ? data.files : [];
+          files = rawFiles
+            .filter((name) => typeof name === "string" && name.toLowerCase().endsWith(".xlsx"))
+            .sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+          currentPage = 1;
+          renderList();
+        } catch (err) {
+          console.error(err);
+          setStatus("加载文件列表失败，请稍后重试或重新生成 index.json。", "error");
+          listEl.innerHTML = "";
+          pageInfo.textContent = "";
+          prevBtn.disabled = true;
+          nextBtn.disabled = true;
+        }
+      }
+
+      pageSizeSelect.addEventListener("change", (event) => {
+        pageSize = Number(event.target.value) || 10;
+        currentPage = 1;
+        renderList();
+      });
+
+      prevBtn.addEventListener("click", () => {
+        if (currentPage > 1) {
+          currentPage -= 1;
+          renderList();
+        }
+      });
+
+      nextBtn.addEventListener("click", () => {
+        const totalPages = Math.max(1, Math.ceil(files.length / pageSize));
+        if (currentPage < totalPages) {
+          currentPage += 1;
+          renderList();
+        }
+      });
+
+      refreshBtn.addEventListener("click", () => loadFiles());
+
+      loadFiles();
+    </script>
+  </body>
+</html>
