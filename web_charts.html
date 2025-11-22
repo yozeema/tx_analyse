@@ -365,12 +365,13 @@
         const topY = gridRect.y;
         const bottomY = gridRect.y + gridRect.height;
         annotationPoints.forEach((point) => {
-          const xPixel = chart.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [
-            point.value[0],
-            0,
-          ])?.[0];
-          const start = [xPixel, topY];
-          const end = [xPixel, bottomY];
+          const pointPixel = chart.convertToPixel({ xAxisIndex: 0, yAxisIndex: 1 }, point.value);
+          const xPixel = pointPixel?.[0];
+          const yPixel = pointPixel?.[1];
+          const startY = point.placement === "top" ? bottomY : topY;
+          const endY = yPixel;
+          const start = [xPixel, startY];
+          const end = [xPixel, endY];
           if (
             !start ||
             !end ||
@@ -412,8 +413,8 @@
           const isTop = drawTop;
           drawTop = !drawTop;
           const verticalMeta = isTop
-            ? { valueY: 1.05, connector: 0.8, offset: -12, align: "bottom" }
-            : { valueY: -0.05, connector: 0.2, offset: 12, align: "top" };
+            ? { valueY: 1.05, connector: 0.8, offset: -12, align: "bottom", placement: "top" }
+            : { valueY: -0.05, connector: 0.2, offset: 12, align: "top", placement: "bottom" };
           const fullText = tags.map(formatAnnotationTag).join("\n");
           const shortLabel = tags.map((tag) => tag.label).join(" · ");
           annotationPoints.push({
@@ -424,6 +425,7 @@
             fullText,
             time: timeText,
             tags,
+            placement: verticalMeta.placement,
           });
         });
       }
