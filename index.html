@@ -208,6 +208,8 @@
           li.className = "session-item";
           const link = document.createElement("a");
           link.href = `web_charts.html?file=${encodeURIComponent(fileName)}`;
+          link.target = "_blank"; // 新标签页打开详情
+          link.rel = "noopener noreferrer";
           link.title = "查看趋势图";
 
           const meta = document.createElement("div");
