@@ -291,14 +291,11 @@
         watchUcntRank: "在线观众高峰",
         keyEvent: "关键事件",
       };
-      const ANNOTATION_ANCHOR_FIELD = "watchUcnt";
-
       let chart = echarts.init(document.getElementById("chart"));
       let tableData = [];
       let availableFields = [];
       let selectedSeries = new Set(DEFAULT_SERIES);
       let annotationPoints = [];
-      let annotationAnchorField = null;
       let connectorElements = [];
 
       chart.on("finished", () => {
@@ -323,7 +320,6 @@
         availableFields = [];
         selectedSeries = new Set(DEFAULT_SERIES);
         annotationPoints = [];
-        annotationAnchorField = null;
         clearAnnotationConnectors();
         SERIES_CONTROLS.innerHTML = "";
         ANNOTATION_LIST.innerHTML = "";
@@ -342,13 +338,6 @@
 
       function formatAnnotationTag(tag) {
         return `${tag.label}：${tag.value}`;
-      }
-
-      function resolveAnnotationAnchorField() {
-        const hasAnchor = tableData.some((row) =>
-          Object.prototype.hasOwnProperty.call(row, ANNOTATION_ANCHOR_FIELD)
-        );
-        return hasAnchor ? ANNOTATION_ANCHOR_FIELD : null;
       }
 
       function scheduleAnnotationConnectorUpdate() {
@@ -370,16 +359,18 @@
         clearAnnotationConnectors();
         if (!chart || !annotationPoints.length) return;
         const zr = chart.getZr();
+        const gridModel = chart.getModel()?.getComponent("grid");
+        const gridRect = gridModel?.coordinateSystem?.getRect?.();
+        if (!gridRect) return;
+        const topY = gridRect.y;
+        const bottomY = gridRect.y + gridRect.height;
         annotationPoints.forEach((point) => {
-          if (point.targetValue === null || point.targetValue === undefined) return;
-          const start = chart.convertToPixel(
-            { xAxisIndex: 0, yAxisIndex: 1 },
-            point.value
-          );
-          const end = chart.convertToPixel(
-            { xAxisIndex: 0, yAxisIndex: 0 },
-            [point.value[0], point.targetValue]
-          );
+          const xPixel = chart.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [
+            point.value[0],
+            0,
+          ])?.[0];
+          const start = [xPixel, topY];
+          const end = [xPixel, bottomY];
           if (
             !start ||
             !end ||
@@ -410,7 +401,7 @@
         });
       }
 
-      function collectAnnotationData(anchorField) {
+      function collectAnnotationData() {
         annotationPoints = [];
         let drawTop = true;
         tableData.forEach((row) => {
@@ -425,10 +416,6 @@
             : { valueY: -0.05, connector: 0.2, offset: 12, align: "top" };
           const fullText = tags.map(formatAnnotationTag).join("\n");
           const shortLabel = tags.map((tag) => tag.label).join(" · ");
-          const targetValue =
-            anchorField && Object.prototype.hasOwnProperty.call(row, anchorField)
-              ? normalizeValue(row[anchorField])
-              : null;
           annotationPoints.push({
             value: [timeText, verticalMeta.valueY],
             labelOffset: verticalMeta.offset,
@@ -437,10 +424,8 @@
             fullText,
             time: timeText,
             tags,
-            targetValue,
           });
         });
-        annotationAnchorField = anchorField || null;
       }
 
       function renderAnnotationList() {
@@ -625,8 +610,7 @@
               selectedSeries.delete(fieldName);
               label.classList.remove("active");
             }
-            const nextAnchor = resolveAnnotationAnchorField();
-            collectAnnotationData(nextAnchor);
+            collectAnnotationData();
             renderAnnotationList();
             renderChart();
           });
@@ -666,8 +650,7 @@
           selectedSeries.add(availableFields[0]);
         }
 
-        const anchorField = resolveAnnotationAnchorField();
-        collectAnnotationData(anchorField);
+        collectAnnotationData();
         renderAnnotationList();
         buildControls();
         renderChart();
