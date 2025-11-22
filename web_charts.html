@@ -769,8 +769,9 @@
         if (!fileName) return;
         setStatus(`正在加载 ${fileName}...`, "info");
         try {
+          const cacheBust = Date.now(); // 避免 CDN/浏览器命中旧缓存
           const response = await fetch(
-            `live_data/${encodeURIComponent(fileName)}`,
+            `live_data/${encodeURIComponent(fileName)}?t=${cacheBust}`,
             { cache: "no-store" }
           );
           if (!response.ok) {
