@@ -415,8 +415,12 @@
           const verticalMeta = isTop
             ? { valueY: 1.05, connector: 0.8, offset: -12, align: "bottom", placement: "top" }
             : { valueY: -0.05, connector: 0.2, offset: 12, align: "top", placement: "bottom" };
-          const fullText = tags.map(formatAnnotationTag).join("\n");
-          const shortLabel = tags.map((tag) => tag.label).join(" · ");
+          const fullText = tags
+            .map((tag) => (tag.type === "keyEvent" ? tag.value : formatAnnotationTag(tag)))
+            .join("\n");
+          const shortLabel = tags
+            .map((tag) => (tag.type === "keyEvent" ? tag.value : tag.label))
+            .join(" · ");
           annotationPoints.push({
             value: [timeText, verticalMeta.valueY],
             labelOffset: verticalMeta.offset,
