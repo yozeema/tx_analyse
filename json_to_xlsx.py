@@ -29,6 +29,7 @@ FIELD_LABELS = {
     "pcuTotal": "在线人数",
     "watchUcnt": "进入直播间人数",
     "watchUcntRank": "在线观众高峰",
+    "keyEvent": "关键事件",
 }
 
 
@@ -279,6 +280,9 @@ def main() -> None:
         raise SystemExit("data.series is empty, nothing to write.")
 
     fields = _ordered_fields(series)
+    if "keyEvent" in fields:
+        fields.remove("keyEvent")
+    fields.append("keyEvent")  # always keep the key event column last
     chinese_labels = [FIELD_LABELS.get(field, field) for field in fields]
     data_rows = [[entry.get(field, "") for field in fields] for entry in series]
 
