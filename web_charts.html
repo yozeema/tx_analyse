@@ -216,20 +216,10 @@
         color: #1a365d;
       }
 
-      .annotation-tag-c {
-        border-color: rgba(49, 130, 206, 0.3);
-      }
-
-      .annotation-tag-music {
-        background: rgba(56, 161, 105, 0.12);
-        color: #1c4532;
-        border-color: rgba(56, 161, 105, 0.2);
-      }
-
-      .annotation-tag-memo {
-        background: rgba(113, 128, 150, 0.12);
-        color: #2d3748;
-        border-color: rgba(113, 128, 150, 0.2);
+      .annotation-tag-keyEvent {
+        background: rgba(74, 144, 226, 0.12);
+        color: #1a365d;
+        border-color: rgba(74, 144, 226, 0.3);
       }
     </style>
   </head>
@@ -263,8 +253,8 @@
       </section>
 
       <section id="annotation-panel" class="panel annotation-panel hidden">
-        <h2>主C / 音乐标注时间轴</h2>
-        <p class="legend-note">通过卡片形式查看所有主C、音乐或备注信息。</p>
+        <h2>关键事件标注时间轴</h2>
+        <p class="legend-note">通过卡片形式查看所有关键事件信息。</p>
         <div id="annotation-list" class="annotation-list"></div>
       </section>
     </main>
@@ -283,8 +273,7 @@
       const ANNOTATION_LIST = document.getElementById("annotation-list");
 
       const DEFAULT_SERIES = ["pcuTotal", "watchUcnt"];
-      const SPECIAL_FIELDS = ["c", "music"];
-      const SKIPPED_FIELDS = ["timeMinute", "memo", ...SPECIAL_FIELDS];
+      const SKIPPED_FIELDS = ["timeMinute", "keyEvent", "c", "music", "memo"];
 
       const FIELD_LABELS = {
         timeMinute: "时刻",
@@ -300,9 +289,7 @@
         pcuTotal: "在线人数",
         watchUcnt: "进入直播间人数",
         watchUcntRank: "在线观众高峰",
-        c: "主C",
-        music: "音乐",
-        memo: "备注",
+        keyEvent: "关键事件",
       };
       const ANNOTATION_ANCHOR_FIELD = "watchUcnt";
 
@@ -354,9 +341,6 @@
       }
 
       function formatAnnotationTag(tag) {
-        if (tag.type === "c" || tag.type === "music") {
-          return tag.value;
-        }
         return `${tag.label}：${tag.value}`;
       }
 
@@ -431,9 +415,7 @@
         let drawTop = true;
         tableData.forEach((row) => {
           const tags = [];
-          if (row.c) tags.push({ label: "主C", value: row.c, type: "c" });
-          if (row.music) tags.push({ label: "音乐", value: row.music, type: "music" });
-          if (row.memo) tags.push({ label: "备注", value: row.memo, type: "memo" });
+          if (row.keyEvent) tags.push({ label: "关键事件", value: row.keyEvent, type: "keyEvent" });
           if (!tags.length) return;
           const timeText = row.timeMinute ?? "--";
           const isTop = drawTop;
@@ -442,10 +424,7 @@
             ? { valueY: 1.05, connector: 0.8, offset: -12, align: "bottom" }
             : { valueY: -0.05, connector: 0.2, offset: 12, align: "top" };
           const fullText = tags.map(formatAnnotationTag).join("\n");
-          const shortLabel = tags
-            .filter((tag) => tag.type !== "memo")
-            .map((tag) => tag.label)
-            .join(" · ");
+          const shortLabel = tags.map((tag) => tag.label).join(" · ");
           const targetValue =
             anchorField && Object.prototype.hasOwnProperty.call(row, anchorField)
               ? normalizeValue(row[anchorField])
@@ -454,7 +433,7 @@
             value: [timeText, verticalMeta.valueY],
             labelOffset: verticalMeta.offset,
             labelAlign: verticalMeta.align,
-            shortLabel: shortLabel || "标注",
+            shortLabel: shortLabel || "关键事件",
             fullText,
             time: timeText,
             tags,
@@ -540,7 +519,7 @@
                   },
                 }));
                 return {
-                  name: "主C/音乐标记",
+                  name: "关键事件标记",
                   type: "scatter",
                   yAxisIndex: 1,
                   symbolSize: 8,
@@ -582,9 +561,7 @@
                   return `${item.marker}${item.seriesName}：${val}`;
                 });
               const extras = [];
-              const performerLine = [baseRow.c, baseRow.music].filter(Boolean).join(" ");
-              if (performerLine) extras.push(performerLine);
-              if (baseRow.memo) extras.push(`备注：${baseRow.memo}`);
+              if (baseRow.keyEvent) extras.push(`关键事件：${baseRow.keyEvent}`);
               if (extras.length) {
                 lines.push(extras.join("<br/>"));
               }
