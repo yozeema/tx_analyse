@@ -339,6 +339,10 @@
       const SKIPPED_FIELDS = ["timeMinute", "keyEvent", "c", "music", "memo"];
       const MIN_CHART_WIDTH_PERCENT = 30;
       const RESIZE_DIFF_THRESHOLD = 0.5; // 小于该百分比差异不触发重绘
+      const SERIES_COLORS = {
+        pcuTotal: "#2f855a", // 在线人数：绿色
+        watchUcnt: "#3182ce", // 进入直播间人数：蓝色
+      };
 
       const FIELD_LABELS = {
         timeMinute: "时刻",
@@ -651,6 +655,7 @@
         const xAxis = tableData.map((row) => row.timeMinute ?? "");
         const lineSeries = [...selectedSeries].map((field) => {
           const label = FIELD_LABELS[field] || field;
+          const color = SERIES_COLORS[field];
           return {
             name: label,
             type: "line",
@@ -658,6 +663,7 @@
             connectNulls: true,
             emphasis: { focus: "series" },
             data: tableData.map((row) => normalizeValue(row[field])),
+            ...(color ? { itemStyle: { color }, lineStyle: { color } } : {}),
           };
         });
 
