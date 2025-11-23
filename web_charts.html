@@ -534,6 +534,19 @@
         return { xAxis, series: annotationSeries ? [...lineSeries, annotationSeries] : lineSeries };
       }
 
+      function getSelectedDataMax() {
+        let maxValue = null;
+        tableData.forEach((row) => {
+          selectedSeries.forEach((field) => {
+            const value = normalizeValue(row[field]);
+            if (value !== null) {
+              maxValue = maxValue === null ? value : Math.max(maxValue, value);
+            }
+          });
+        });
+        return maxValue;
+      }
+
       function renderChart() {
         if (!tableData.length) {
           chart.clear();
@@ -542,6 +555,9 @@
         }
 
         const { xAxis, series } = buildSeries();
+        const yAxisMax = getSelectedDataMax();
+        const paddedYAxisMax =
+          yAxisMax === null ? null : Math.ceil((yAxisMax + 1000) / 1000) * 1000;
 
         const option = {
           backgroundColor: "#fff",
@@ -588,6 +604,8 @@
             {
               type: "value",
               name: "指标值",
+              // 主轴上限：最大值加 1000 后按千位向上取整，避免关键事件标签压线
+              max: paddedYAxisMax === null ? undefined : paddedYAxisMax,
             },
             {
               type: "value",
