@@ -103,9 +103,61 @@
         background: #edf5ff;
       }
 
+      .chart-resize-shell {
+        position: relative;
+        width: 100%;
+        max-width: 100%;
+        overflow: visible;
+        padding-right: 16px; /* 给拖拽手柄留出空间 */
+      }
+
+      .chart-resize-inner {
+        position: relative;
+        min-width: 30%;
+        width: 100%;
+        max-width: 100%;
+        transition: width 0.1s ease;
+      }
+
+      .chart-resize-inner.no-transition {
+        transition: none !important;
+      }
+
       #chart {
         width: 100%;
         height: 540px;
+      }
+
+      .chart-resize-handle {
+        position: absolute;
+        top: 0;
+        right: -6px;
+        width: 12px;
+        height: 100%;
+        cursor: ew-resize;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 5;
+      }
+
+      .chart-resize-handle::before {
+        content: "";
+        width: 4px;
+        height: 56px;
+        border-radius: 4px;
+        background: linear-gradient(180deg, #cbd5f5 0%, #a0b4e8 100%);
+        box-shadow: 0 2px 8px rgba(49, 130, 206, 0.25);
+        opacity: 0.9;
+      }
+
+      .chart-resize-tip {
+        font-size: 13px;
+        color: #556079;
+        margin: 8px 0 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
 
       #status {
@@ -249,7 +301,15 @@
       </section>
 
       <section class="panel">
-        <div id="chart"></div>
+        <div id="chart-resize-shell" class="chart-resize-shell">
+          <div id="chart-resize-inner" class="chart-resize-inner">
+            <div id="chart"></div>
+            <div id="chart-resize-handle" class="chart-resize-handle" title="拖动调整图表宽度，双击恢复全宽"></div>
+          </div>
+        </div>
+        <p class="chart-resize-tip">
+          可拖动右侧手柄拉长或拉窄图表宽度，双击手柄恢复全宽。
+        </p>
       </section>
 
       <section id="annotation-panel" class="panel annotation-panel hidden">
@@ -271,9 +331,14 @@
       const SERIES_CONTROLS = document.getElementById("series-controls");
       const ANNOTATION_PANEL = document.getElementById("annotation-panel");
       const ANNOTATION_LIST = document.getElementById("annotation-list");
+      const CHART_RESIZE_SHELL = document.getElementById("chart-resize-shell");
+      const CHART_RESIZE_INNER = document.getElementById("chart-resize-inner");
+      const CHART_RESIZE_HANDLE = document.getElementById("chart-resize-handle");
 
       const DEFAULT_SERIES = ["pcuTotal", "watchUcnt"];
       const SKIPPED_FIELDS = ["timeMinute", "keyEvent", "c", "music", "memo"];
+      const MIN_CHART_WIDTH_PERCENT = 30;
+      const RESIZE_DIFF_THRESHOLD = 0.5; // 小于该百分比差异不触发重绘
 
       const FIELD_LABELS = {
         timeMinute: "时刻",
@@ -298,6 +363,10 @@
       let annotationPoints = [];
       let connectorElements = [];
       let showKeyEvents = true;
+      let chartWidthPercent = 100;
+      let pendingWidthPercent = null;
+      let pendingWidthForce = false;
+      let resizeRafId = null;
 
       chart.on("finished", () => {
         scheduleAnnotationConnectorUpdate();
@@ -314,6 +383,106 @@
       function setStatus(message, type = "info") {
         STATUS.textContent = message;
         STATUS.className = type;
+      }
+
+      function clampChartWidth(percent) {
+        return Math.min(100, Math.max(MIN_CHART_WIDTH_PERCENT, percent));
+      }
+
+      function applyChartWidth(percent, force = false) {
+        if (!CHART_RESIZE_INNER) return;
+        const clamped = clampChartWidth(percent);
+        const diff = Math.abs(clamped - chartWidthPercent);
+        if (!force && diff < RESIZE_DIFF_THRESHOLD) return;
+        chartWidthPercent = clamped;
+        CHART_RESIZE_INNER.style.width = `${clamped}%`;
+        chart.resize();
+        scheduleAnnotationConnectorUpdate();
+      }
+
+      function scheduleChartWidth(percent, force = false) {
+        pendingWidthPercent = clampChartWidth(percent);
+        pendingWidthForce = pendingWidthForce || force;
+        if (resizeRafId) return;
+        resizeRafId = requestAnimationFrame(() => {
+          resizeRafId = null;
+          if (pendingWidthPercent === null) return;
+          applyChartWidth(pendingWidthPercent, pendingWidthForce);
+          pendingWidthPercent = null;
+          pendingWidthForce = false;
+        });
+      }
+
+      function setupChartResizer() {
+        if (!CHART_RESIZE_HANDLE || !CHART_RESIZE_SHELL || !CHART_RESIZE_INNER) return;
+        let dragState = null;
+
+        const startDrag = (clientX) => {
+          const shellWidth = CHART_RESIZE_SHELL.getBoundingClientRect().width;
+          const currentWidth = CHART_RESIZE_INNER.getBoundingClientRect().width;
+          if (!shellWidth) return;
+          dragState = { startX: clientX, shellWidth, startWidth: currentWidth };
+          CHART_RESIZE_INNER.classList.add("no-transition");
+        };
+
+        const handleMove = (clientX) => {
+          if (!dragState) return;
+          const deltaX = clientX - dragState.startX;
+          const nextWidth = dragState.startWidth + deltaX;
+          const percent = (nextWidth / dragState.shellWidth) * 100;
+          scheduleChartWidth(percent);
+        };
+
+        const stopDrag = () => {
+          dragState = null;
+          CHART_RESIZE_INNER.classList.remove("no-transition");
+          document.removeEventListener("mousemove", onMouseMove);
+          document.removeEventListener("mouseup", stopDrag);
+          document.removeEventListener("touchmove", onTouchMove);
+          document.removeEventListener("touchend", stopDrag);
+        };
+
+        const onMouseMove = (event) => {
+          handleMove(event.clientX);
+        };
+
+        const onTouchMove = (event) => {
+          if (!event.touches?.length) return;
+          event.preventDefault();
+          handleMove(event.touches[0].clientX);
+        };
+
+        CHART_RESIZE_HANDLE.addEventListener("mousedown", (event) => {
+          event.preventDefault();
+          startDrag(event.clientX);
+          document.addEventListener("mousemove", onMouseMove);
+          document.addEventListener("mouseup", stopDrag);
+        });
+
+        CHART_RESIZE_HANDLE.addEventListener(
+          "touchstart",
+          (event) => {
+            if (!event.touches?.length) return;
+            startDrag(event.touches[0].clientX);
+            document.addEventListener("touchmove", onTouchMove, { passive: false });
+            document.addEventListener("touchend", stopDrag);
+          },
+          { passive: false }
+        );
+
+        CHART_RESIZE_HANDLE.addEventListener("dblclick", () => {
+          if (resizeRafId) {
+            cancelAnimationFrame(resizeRafId);
+            resizeRafId = null;
+          }
+          pendingWidthPercent = null;
+          pendingWidthForce = false;
+          CHART_RESIZE_INNER.classList.remove("no-transition");
+          applyChartWidth(100, true);
+        });
+
+        // 初始宽度同步
+        scheduleChartWidth(chartWidthPercent, true);
       }
 
       function isZeroMoment(value) {
@@ -780,6 +949,8 @@
       UPLOAD_BTN.addEventListener("click", () => FILE_INPUT.click());
 
       CLEAR_BTN.addEventListener("click", () => resetState());
+
+      setupChartResizer();
 
       async function loadFileFromQuery() {
         const params = new URLSearchParams(window.location.search);
