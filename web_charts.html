@@ -898,7 +898,8 @@
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-          handleWorkbookRows(rows, sourceLabel);
+          const dataRows = rows.slice(1); // 有效数据从第三行开始，跳过第二行的数据
+          handleWorkbookRows(dataRows, sourceLabel);
         } catch (err) {
           console.error(err);
           setStatus("解析失败，请确认文件格式正确。", "error");
